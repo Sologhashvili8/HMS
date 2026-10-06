@@ -27,6 +27,22 @@ public class ReservationsController : ControllerBase
         return Ok(ApiResponse<IReadOnlyList<ReservationDto>>.SuccessResponse(reservations));
     }
 
+    [HttpGet("details")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<StaffReservationDto>>>> GetDetails(int hotelId)
+    {
+        var reservations = await _reservationService.GetStaffReservationsAsync(hotelId);
+        return Ok(ApiResponse<IReadOnlyList<StaffReservationDto>>.SuccessResponse(reservations));
+    }
+
+    [HttpPost("manual")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
+    public async Task<ActionResult<ApiResponse<ReservationDto>>> CreateForGuest(int hotelId, CreateStaffReservationDto dto)
+    {
+        var reservation = await _reservationService.CreateForGuestAsync(hotelId, dto);
+        return CreatedAtAction(nameof(GetById), new { hotelId, reservationId = reservation.Id }, ApiResponse<ReservationDto>.SuccessResponse(reservation));
+    }
+
     [HttpGet("{reservationId}")]
     public async Task<ActionResult<ApiResponse<ReservationDto>>> GetById(int hotelId, int reservationId)
     {

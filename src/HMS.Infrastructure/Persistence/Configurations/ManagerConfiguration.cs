@@ -28,7 +28,7 @@ public class ManagerConfiguration : IEntityTypeConfiguration<Manager>
             .HasForeignKey(m => m.HotelId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(m => m.HotelId).HasDatabaseName("IX_Managers_HotelId");
+        builder.HasIndex(m => m.HotelId).IsUnique().HasDatabaseName("UQ_Managers_HotelId");
 
         builder.HasOne<ApplicationUser>()
             .WithOne()

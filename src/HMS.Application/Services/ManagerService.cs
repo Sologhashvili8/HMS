@@ -29,79 +29,77 @@ public class ManagerService : IManagerService
         return managers.Adapt<List<ManagerDto>>();
     }
 
-    public async Task<ManagerDto> GetByIdAsync(int hotelId, Guid managerId)
+    public async Task<ManagerDto> GetMyAsync()
     {
-        await EnsureCanAccessHotelAsync(hotelId);
+        var userId = _currentUser.UserId ?? throw new ForbiddenException("Not authenticated.");
 
-        var manager = await GetManagerInHotelAsync(hotelId, managerId);
-        return manager.Adapt<ManagerDto>();
+        var manager = await _unitOfWork.Repository<Manager>().GetByIdAsync(userId)
+            ?? throw new ForbiddenException("You are not assigned to any hotel.");
+
+        var hotel = await _unitOfWork.Repository<Hotel>().GetByIdAsync(manager.HotelId);
+
+        var dto = manager.Adapt<ManagerDto>();
+        dto.HotelName = hotel?.Name ?? string.Empty;
+        return dto;
     }
 
-    public async Task<ManagerDto> CreateAsync(int hotelId, CreateManagerDto dto)
+    public async Task<ManagerDto> AssignAsync(int hotelId, Guid userId)
     {
         var hotel = await _unitOfWork.Repository<Hotel>().GetByIdAsync(hotelId)
             ?? throw new NotFoundException($"Hotel with id {hotelId} was not found.");
 
-        var existingPersonalNumber = await _unitOfWork.Repository<Manager>().FindAsync(m => m.PersonalNumber == dto.PersonalNumber);
-        if (existingPersonalNumber.Any())
-            throw new ConflictException("A manager with this personal number already exists.");
+        var hotelManagers = await _unitOfWork.Repository<Manager>().FindAsync(m => m.HotelId == hotelId);
+        if (hotelManagers.Any())
+            throw new ConflictException("This hotel already has a manager. Remove the current manager first.");
 
-        Manager? manager = null;
+        var existingAssignment = await _unitOfWork.Repository<Manager>().GetByIdAsync(userId);
+        if (existingAssignment is not null)
+            throw new ConflictException("This user already manages another hotel.");
+
+        var email = await _identityUserService.GetEmailAsync(userId)
+            ?? throw new NotFoundException($"User with id {userId} was not found.");
+
+        if (await _identityUserService.IsInRoleAsync(userId, Roles.Admin))
+            throw new BadRequestException("An admin cannot be assigned as a hotel manager.");
+
+        var guest = await _unitOfWork.Repository<Guest>().GetByIdAsync(userId)
+            ?? throw new BadRequestException("This user has no profile and cannot be assigned as a manager.");
+
+        var manager = new Manager
+        {
+            Id = userId,
+            FirstName = guest.FirstName,
+            LastName = guest.LastName,
+            PersonalNumber = guest.PersonalNumber,
+            Email = email,
+            PhoneNumber = guest.PhoneNumber,
+            HotelId = hotel.Id
+        };
 
         await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
-            var userId = await _identityUserService.CreateUserAsync(dto.Email, dto.Password, Roles.Manager);
-
-            manager = new Manager
-            {
-                Id = userId,
-                FirstName = dto.FirstName,
-                LastName = dto.LastName,
-                PersonalNumber = dto.PersonalNumber,
-                Email = dto.Email,
-                PhoneNumber = dto.PhoneNumber,
-                HotelId = hotel.Id
-            };
-
             await _unitOfWork.Repository<Manager>().AddAsync(manager);
             await _unitOfWork.SaveChangesAsync();
+            await _identityUserService.AddToRoleAsync(userId, Roles.Manager);
         });
 
-        return manager!.Adapt<ManagerDto>();
+        var dto = manager.Adapt<ManagerDto>();
+        dto.HotelName = hotel.Name;
+        return dto;
     }
 
-    public async Task<ManagerDto> UpdateAsync(int hotelId, Guid managerId, UpdateManagerDto dto)
+    public async Task UnassignAsync(int hotelId)
     {
-        var manager = await GetManagerInHotelAsync(hotelId, managerId);
+        var managers = await _unitOfWork.Repository<Manager>().FindAsync(m => m.HotelId == hotelId);
+        var manager = managers.FirstOrDefault()
+            ?? throw new NotFoundException($"Hotel {hotelId} has no manager.");
 
-        manager.FirstName = dto.FirstName;
-        manager.LastName = dto.LastName;
-        manager.PhoneNumber = dto.PhoneNumber;
-
-        _unitOfWork.Repository<Manager>().Update(manager);
-        await _unitOfWork.SaveChangesAsync();
-
-        return manager.Adapt<ManagerDto>();
-    }
-
-    public async Task DeleteAsync(int hotelId, Guid managerId)
-    {
-        await GetManagerInHotelAsync(hotelId, managerId);
-
-        var otherManagers = await _unitOfWork.Repository<Manager>().FindAsync(m => m.HotelId == hotelId && m.Id != managerId);
-        if (!otherManagers.Any())
-            throw new BadRequestException("Cannot delete the only manager of a hotel. Assign another manager first.");
-
-        await _identityUserService.DeleteUserAsync(managerId);
-    }
-
-    private async Task<Manager> GetManagerInHotelAsync(int hotelId, Guid managerId)
-    {
-        var manager = await _unitOfWork.Repository<Manager>().GetByIdAsync(managerId);
-        if (manager is null || manager.HotelId != hotelId)
-            throw new NotFoundException($"Manager with id {managerId} was not found in hotel {hotelId}.");
-
-        return manager;
+        await _unitOfWork.ExecuteInTransactionAsync(async () =>
+        {
+            _unitOfWork.Repository<Manager>().Remove(manager);
+            await _unitOfWork.SaveChangesAsync();
+            await _identityUserService.RemoveFromRoleAsync(manager.Id, Roles.Manager);
+        });
     }
 
     private async Task EnsureCanAccessHotelAsync(int hotelId)

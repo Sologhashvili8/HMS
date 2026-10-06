@@ -2,6 +2,7 @@ using HMS.Application.DTOs.Hotels;
 using HMS.Application.Exceptions;
 using HMS.Application.Interfaces;
 using HMS.Application.Interfaces.Services;
+using HMS.Domain.Constants;
 using HMS.Domain.Entities;
 using Mapster;
 
@@ -10,10 +11,12 @@ namespace HMS.Application.Services;
 public class HotelService : IHotelService
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IIdentityUserService _identityUserService;
 
-    public HotelService(IUnitOfWork unitOfWork)
+    public HotelService(IUnitOfWork unitOfWork, IIdentityUserService identityUserService)
     {
         _unitOfWork = unitOfWork;
+        _identityUserService = identityUserService;
     }
 
     public async Task<IReadOnlyList<HotelDto>> GetAllAsync(string? country, string? city, byte? rating)
@@ -66,14 +69,30 @@ public class HotelService : IHotelService
             ?? throw new NotFoundException($"Hotel with id {id} was not found.");
 
         var rooms = await _unitOfWork.Repository<Room>().FindAsync(r => r.HotelId == id);
-        if (rooms.Any())
-            throw new BadRequestException("Cannot delete a hotel that still has rooms.");
+        var roomIds = rooms.Select(r => r.Id).ToList();
+
+        if (roomIds.Count > 0)
+        {
+            var reservationRooms = await _unitOfWork.Repository<ReservationRoom>().FindAsync(rr => roomIds.Contains(rr.RoomId));
+            if (reservationRooms.Any())
+                throw new BadRequestException("Cannot delete a hotel whose rooms have reservations.");
+        }
 
         var managers = await _unitOfWork.Repository<Manager>().FindAsync(m => m.HotelId == id);
-        if (managers.Any())
-            throw new BadRequestException("Cannot delete a hotel that still has managers.");
 
-        _unitOfWork.Repository<Hotel>().Remove(hotel);
-        await _unitOfWork.SaveChangesAsync();
+        await _unitOfWork.ExecuteInTransactionAsync(async () =>
+        {
+            foreach (var manager in managers)
+                _unitOfWork.Repository<Manager>().Remove(manager);
+
+            foreach (var room in rooms)
+                _unitOfWork.Repository<Room>().Remove(room);
+
+            _unitOfWork.Repository<Hotel>().Remove(hotel);
+            await _unitOfWork.SaveChangesAsync();
+
+            foreach (var manager in managers)
+                await _identityUserService.RemoveFromRoleAsync(manager.Id, Roles.Manager);
+        });
     }
 }

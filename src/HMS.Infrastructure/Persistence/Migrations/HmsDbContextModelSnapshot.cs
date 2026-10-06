@@ -1,4 +1,4 @@
-﻿
+
 using System;
 using HMS.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -200,7 +200,8 @@ namespace HMS.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("UQ_Managers_Email");
 
                     b.HasIndex("HotelId")
-                        .HasDatabaseName("IX_Managers_HotelId");
+                        .IsUnique()
+                        .HasDatabaseName("UQ_Managers_HotelId");
 
                     b.HasIndex("PersonalNumber")
                         .IsUnique()

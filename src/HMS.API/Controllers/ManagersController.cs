@@ -8,7 +8,6 @@ using Microsoft.AspNetCore.Mvc;
 namespace HMS.API.Controllers;
 
 [ApiController]
-[Route("api/hotels/{hotelId}/managers")]
 public class ManagersController : ControllerBase
 {
     private readonly IManagerService _managerService;
@@ -18,7 +17,15 @@ public class ManagersController : ControllerBase
         _managerService = managerService;
     }
 
-    [HttpGet]
+    [HttpGet("api/managers/me")]
+    [Authorize(Roles = Roles.Manager)]
+    public async Task<ActionResult<ApiResponse<ManagerDto>>> GetMe()
+    {
+        var manager = await _managerService.GetMyAsync();
+        return Ok(ApiResponse<ManagerDto>.SuccessResponse(manager));
+    }
+
+    [HttpGet("api/hotels/{hotelId}/managers")]
     [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<ManagerDto>>>> GetAll(int hotelId)
     {
@@ -26,35 +33,19 @@ public class ManagersController : ControllerBase
         return Ok(ApiResponse<IReadOnlyList<ManagerDto>>.SuccessResponse(managers));
     }
 
-    [HttpGet("{managerId}")]
-    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
-    public async Task<ActionResult<ApiResponse<ManagerDto>>> GetById(int hotelId, Guid managerId)
+    [HttpPut("api/hotels/{hotelId}/manager")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<ActionResult<ApiResponse<ManagerDto>>> Assign(int hotelId, AssignManagerDto dto)
     {
-        var manager = await _managerService.GetByIdAsync(hotelId, managerId);
+        var manager = await _managerService.AssignAsync(hotelId, dto.UserId);
         return Ok(ApiResponse<ManagerDto>.SuccessResponse(manager));
     }
 
-    [HttpPost]
+    [HttpDelete("api/hotels/{hotelId}/manager")]
     [Authorize(Roles = Roles.Admin)]
-    public async Task<ActionResult<ApiResponse<ManagerDto>>> Create(int hotelId, CreateManagerDto dto)
+    public async Task<IActionResult> Unassign(int hotelId)
     {
-        var manager = await _managerService.CreateAsync(hotelId, dto);
-        return CreatedAtAction(nameof(GetById), new { hotelId, managerId = manager.Id }, ApiResponse<ManagerDto>.SuccessResponse(manager));
-    }
-
-    [HttpPut("{managerId}")]
-    [Authorize(Roles = Roles.Admin)]
-    public async Task<ActionResult<ApiResponse<ManagerDto>>> Update(int hotelId, Guid managerId, UpdateManagerDto dto)
-    {
-        var manager = await _managerService.UpdateAsync(hotelId, managerId, dto);
-        return Ok(ApiResponse<ManagerDto>.SuccessResponse(manager));
-    }
-
-    [HttpDelete("{managerId}")]
-    [Authorize(Roles = Roles.Admin)]
-    public async Task<IActionResult> Delete(int hotelId, Guid managerId)
-    {
-        await _managerService.DeleteAsync(hotelId, managerId);
+        await _managerService.UnassignAsync(hotelId);
         return NoContent();
     }
 }

@@ -60,6 +60,9 @@ public class RoomService : IRoomService
         if (dto.Price <= 0)
             throw new BadRequestException("Price must be greater than 0.");
 
+        if (dto.PhotoUrls.Distinct().Count() < 4)
+            throw new BadRequestException("At least 4 photos are required.");
+
         var hotel = await _unitOfWork.Repository<Hotel>().GetByIdAsync(hotelId)
             ?? throw new NotFoundException($"Hotel with id {hotelId} was not found.");
 

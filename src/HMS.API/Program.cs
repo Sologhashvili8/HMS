@@ -11,6 +11,7 @@ using HMS.Infrastructure.Identity;
 using HMS.Infrastructure.Persistence;
 using HMS.Infrastructure.Repositories;
 using HMS.Infrastructure.Security;
+using HMS.Infrastructure.Storage;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -37,6 +38,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IRoomService, RoomService>();
 builder.Services.AddScoped<IIdentityUserService, IdentityUserService>();
 builder.Services.AddScoped<IManagerService, ManagerService>();
+builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IGuestService, GuestService>();
 builder.Services.AddScoped<IReservationService, ReservationService>();
 builder.Services.AddScoped<IAmenityService, AmenityService>();
@@ -44,6 +46,11 @@ builder.Services.AddSingleton<IEncryptionService, AesEncryptionService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<IVerificationCodeService, VerificationCodeService>();
 builder.Services.AddHttpClient<IEmailService, BrevoEmailService>();
+
+if (!string.IsNullOrWhiteSpace(builder.Configuration["Cloudinary:CloudName"]))
+    builder.Services.AddHttpClient<IImageStorageService, CloudinaryImageStorageService>();
+else
+    builder.Services.AddScoped<IImageStorageService, LocalImageStorageService>();
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
@@ -123,6 +130,8 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 var app = builder.Build();
+
+await AdminSeeder.SeedAsync(app.Services);
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 

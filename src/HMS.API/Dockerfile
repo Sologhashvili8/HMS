@@ -22,4 +22,7 @@ RUN dotnet publish "./HMS.API.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
+USER root
+RUN mkdir -p /app/wwwroot/images/uploads && chown -R $APP_UID /app/wwwroot/images/uploads
+USER $APP_UID
 ENTRYPOINT ["dotnet", "HMS.API.dll"]

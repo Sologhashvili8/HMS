@@ -40,6 +40,11 @@ services:
       Brevo__ApiKey: ${BREVO_API_KEY:?set BREVO_API_KEY in .env}
       Brevo__SenderEmail: ${BREVO_SENDER_EMAIL:?set BREVO_SENDER_EMAIL in .env}
       Brevo__SenderName: ${BREVO_SENDER_NAME:-BookNRest}
+      Admin__Email: ${ADMIN_EMAIL:-}
+      Admin__Password: ${ADMIN_PASSWORD:-}
+      Cloudinary__CloudName: ${CLOUDINARY_CLOUD_NAME:-}
+      Cloudinary__ApiKey: ${CLOUDINARY_API_KEY:-}
+      Cloudinary__ApiSecret: ${CLOUDINARY_API_SECRET:-}
 
   hms-frontend:
     build:
