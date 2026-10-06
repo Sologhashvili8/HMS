@@ -1,0 +1,55 @@
+name: hms
+
+# Prod სტეკი: SQL Server + API + Frontend (nginx). გარეთ მხოლოდ პორტი 80 იხსნება.
+# გაშვება:  docker compose -f docker-compose.prod.yml up -d --build
+# დირექტორიები სერვერზე გვერდიგვერდ უნდა იყოს:  ./HMS  და  ../hms-frontend
+
+services:
+  sql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?დააყენე MSSQL_SA_PASSWORD .env-ში}
+      MSSQL_MEMORY_LIMIT_MB: "1536"
+    volumes:
+      - sqldata:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q \"SELECT 1\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  hms-api:
+    build:
+      context: .
+      dockerfile: src/HMS.API/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      sql:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: Server=sql,1433;Database=HotelsManagementSystemDB;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True
+      Jwt__Key: ${JWT_KEY:?დააყენე JWT_KEY .env-ში}
+      Jwt__Issuer: HMS.API
+      Jwt__Audience: HMS.Client
+      Jwt__ExpiryMinutes: "60"
+      Encryption__Key: ${ENCRYPTION_KEY:?დააყენე ENCRYPTION_KEY .env-ში}
+      Brevo__ApiKey: ${BREVO_API_KEY:?set BREVO_API_KEY in .env}
+      Brevo__SenderEmail: ${BREVO_SENDER_EMAIL:?set BREVO_SENDER_EMAIL in .env}
+      Brevo__SenderName: ${BREVO_SENDER_NAME:-BookNRest}
+
+  hms-frontend:
+    build:
+      context: ../hms-frontend
+    restart: unless-stopped
+    depends_on:
+      - hms-api
+    ports:
+      - "80:80"
+
+volumes:
+  sqldata:

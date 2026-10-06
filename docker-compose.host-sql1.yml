@@ -1,0 +1,30 @@
+name: hms
+
+services:
+  hms-api:
+    build:
+      context: .
+      dockerfile: src/HMS.API/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "5080:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: Server=host.docker.internal,1433;Database=HotelsManagementSystemDB;User Id=sa;Password=${MSSQL_SA_PASSWORD:?set MSSQL_SA_PASSWORD in .env};TrustServerCertificate=True
+      Jwt__Key: ${JWT_KEY:?set JWT_KEY in .env}
+      Jwt__Issuer: HMS.API
+      Jwt__Audience: HMS.Client
+      Jwt__ExpiryMinutes: "60"
+      Encryption__Key: ${ENCRYPTION_KEY:?set ENCRYPTION_KEY in .env}
+
+  hms-frontend:
+    build:
+      context: ../hms-frontend
+    restart: unless-stopped
+    depends_on:
+      - hms-api
+    ports:
+      - "4200:80"
